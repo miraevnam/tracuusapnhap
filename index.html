@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Tra cứu Sáp nhập Tỉnh – Tự động lấy dữ liệu</title>
+<meta name="description" content="Tra cứu sáp nhập, tách, sắp xếp đơn vị hành chính cấp tỉnh từ bài viết nguồn. Hỗ trợ gợi ý, khử dấu, lọc nhanh, cache." />
+<style>
+  :root{
+    --primary:#0b66ff;
+    --bg:#f6f9ff;
+    --card:#ffffff;
+    --muted:#6b7280;
+    --ring:#bcd2ff;
+    --shadow:0 10px 25px rgba(0,0,0,.08);
+    --radius:16px;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Helvetica Neue", sans-serif;
+    background:var(--bg);
+    color:#0f172a;
+  }
+  header{
+    background:linear-gradient(90deg,#0b66ff,#5a8dff);
+    color:#fff;
+    padding:20px 16px;
+  }
+  .container{max-width:960px;margin:0 auto}
+  .title{font-size:clamp(20px,3.5vw,32px);font-weight:800;letter-spacing:.2px;margin:0}
+  .subtitle{margin:6px 0 0;font-size:14px;opacity:.9}
+  main{padding:22px 16px}
+  .card{
+    background:var(--card);
+    border-radius:var(--radius);
+    box-shadow:var(--shadow);
+    padding:18px;
+  }
+  .row{
+    display:grid;
+    gap:12px;
+    grid-template-columns: 1fr 140px;
+  }
+  @media (max-width:640px){ .row{grid-template-columns:1fr} }
+  .input-wrap{
+    position:relative;
+  }
+  input[type="text"]{
+    width:100%;
+    padding:12px 44px 12px 14px;
+    font-size:16px;
+    border:2px solid #dbe6ff;
+    border-radius:12px;
+    outline:none;
+    transition:.18s border,.18s box-shadow;
+    background:#fafcff;
+  }
+  input[type="text"]:focus{
+    border-color:var(--primary);
+    box-shadow:0 0 0 4px var(--ring);
+  }
+  .clear-btn{
+    position:absolute;right:8px;top:50%;transform:translateY(-50%);
+    border:none;background:transparent;cursor:pointer;font-size:18px;opacity:.6
+  }
+  .btn{
+    display:inline-flex;align-items:center;justify-content:center;
+    gap:8px;
+    height:44px;padding:0 14px;
+    border:none;border-radius:12px;cursor:pointer;
+    font-weight:600;font-size:15px;
+    background:var(--primary);color:#fff;
+    box-shadow:0 6px 14px rgba(11,102,255,.22);
+  }
+  .btn.secondary{background:#eef4ff;color:#0b3b9a;box-shadow:none;border:1px solid #dbe6ff}
+  .btn:active{transform:translateY(1px)}
+  .meta{
+    display:flex;flex-wrap:wrap;gap:8px;margin-top:12px;font-size:13px;color:var(--muted)
+  }
+  .pill{
+    background:#eef4ff;border:1px solid #dbe6ff;color:#0b3b9a;
+    padding:6px 10px;border-radius:999px;font-weight:600;cursor:pointer
+  }
+  .pill.active{background:#dbe6ff}
+  .status{margin-top:10px;font-size:13px;color:var(--muted)}
+  .results{
+    margin-top:16px;display:grid;gap:12px
+  }
+  .item{
+    background:#fff;border:1px solid #e8eefc;border-radius:14px;padding:14px 14px 12px
+  }
+  .item h3{margin:0 0 6px;font-size:16px}
+  .item p{margin:0;font-size:15px;line-height:1.5;color:#111827}
+  .muted{color:var(--muted);font-size:12px;margin-top:6px}
+  .empty{
+    text-align:center;color:var(--muted);padding:24px;border:2px dashed #e5eaff;border-radius:14px;background:#fafcff
+  }
+  .footer-actions{
+    display:flex;flex-wrap:wrap;gap:10px;margin-top:16px
+  }
+  .kbd{
+    font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace;
+    background:#f3f4f6;border:1px solid #e5e7eb;border-bottom-width:3px;border-radius:6px;padding:2px 6px;font-size:12px
+  }
+  /* Autocomplete */
+  .ac{
+    position:absolute;left:0;right:0;top:calc(100% + 6px);
+    background:#fff;border:1px solid #e8eefc;border-radius:12px;box-shadow:var(--shadow);
+    z-index:10;max-height:280px;overflow:auto;display:none
+  }
+  .ac.show{display:block}
+  .ac-item{padding:10px 12px;cursor:pointer}
+  .ac-item:hover{background:#f5f8ff}
+</style>
+</head>
+<body>
+  <header>
+    <div class="container">
+      <h1 class="title">Tra cứu Sáp nhập Tỉnh</h1>
+      <p class="subtitle">Dữ liệu lấy trực tiếp từ: thuviennhadat.vn/sap-nhap-tinh (qua bộ đọc an toàn, tránh CORS). Tìm theo từ khóa, khử dấu, có gợi ý.</p>
+    </div>
+  </header>
+
+  <main>
+    <div class="container">
+      <div class="card">
+        <div class="row">
+          <div class="input-wrap">
+            <input id="q" type="text" placeholder="Nhập từ khóa: ví dụ 'Hà Tây', 'sáp nhập', 'Bình Dương'..." autocomplete="off">
+            <button class="clear-btn" title="Xóa" id="clearBtn">✕</button>
+            <div class="ac" id="ac"></div>
+          </div>
+          <div style="display:flex; gap:8px">
+            <button class="btn" id="refreshBtn">↻ Làm mới dữ liệu</button>
+            <button class="btn secondary" id="exportBtn">Xuất JSON</button>
+          </div>
+        </div>
+
+        <div class="meta">
+          <span class="pill" data-filter="all">Tất cả</span>
+          <span class="pill" data-filter="sapnhap">Sáp nhập / Hợp nhất</span>
+          <span class="pill" data-filter="tach">Tách</span>
+          <span class="pill" data-filter="khac">Khác</span>
+          <span class="pill" id="countPill">0 kết quả</span>
+        </div>
+
+        <div class="status" id="status">Đang tải dữ liệu lần đầu...</div>
+
+        <div class="results" id="results"></div>
+
+        <div class="footer-actions">
+          <span class="kbd">Mẹo: gõ không dấu cũng tìm được (vd: "ha tay").</span>
+          <span class="kbd">Dùng Enter để tìm nhanh.</span>
+          <span class="kbd">Bấm “↻ Làm mới dữ liệu” nếu trang nguồn vừa cập nhật.</span>
+        </div>
+      </div>
+    </div>
+  </main>
+
+<script>
+(function(){
+  // ====== Config & Helpers ======
+  const SOURCE_URL = "https://thuviennhadat.vn/sap-nhap-tinh";
+  // Dùng bộ đọc không chặn CORS (trả về nội dung đã trích xuất)
+  const FETCH_URL  = "https://r.jina.ai/http://" + SOURCE_URL.replace(/^https?:\/\//,'');
+  const CACHE_KEY  = "tra_cuu_sap_nhap_cache_v1";
+  const CACHE_TTL_MS = 24 * 60 * 60 * 1000; // 24h
+
+  const KEYWORDS = {
+    sapnhap: ["sáp nhập","hợp nhất","nhập vào","sáp vào","gộp vào"],
+    tach:    ["tách","tách thành","chia tách","tách ra"],
+  };
+
+  const strip = (s) => s
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g,"")
+    .replace(/đ/g,"d").replace(/Đ/g,"D")
+    .toLowerCase()
+    .trim();
+
+  const el = (id) => document.getElementById(id);
+
+  const state = {
+    rawText: "",
+    items: [],
+    filtered: [],
+    filter: "all",
+    query: ""
+  };
+
+  // ====== Fetch & Parse ======
+  async function loadData({force=false}={}){
+    const status = el("status");
+    status.textContent = force ? "Đang làm mới dữ liệu từ nguồn..." : "Đang tải dữ liệu...";
+    try{
+      const cached = JSON.parse(localStorage.getItem(CACHE_KEY) || "null");
+      const now = Date.now();
+      if(!force && cached && (now - cached.ts) < CACHE_TTL_MS){
+        state.rawText = cached.rawText;
+        state.items   = cached.items;
+        status.textContent = `Dùng dữ liệu cache (${new Date(cached.ts).toLocaleString()}). Nguồn: ${SOURCE_URL}`;
+        render();
+        return;
+      }
+
+      const res = await fetch(FETCH_URL, {headers:{'Accept':'text/plain'}});
+      if(!res.ok) throw new Error("Không thể tải nội dung nguồn");
+      const text = await res.text();
+      state.rawText = text;
+      state.items = parseItems(text);
+
+      localStorage.setItem(CACHE_KEY, JSON.stringify({ts:Date.now(), rawText:text, items:state.items}));
+      status.textContent = `Đã tải dữ liệu mới từ nguồn. (${new Date().toLocaleString()})`;
+      render();
+    }catch(err){
+      console.error(err);
+      status.textContent = "Lỗi tải dữ liệu. Bạn có thể thử bấm “Làm mới dữ liệu” hoặc kiểm tra kết nối.";
+      // dự phòng: nếu có cache cũ thì dùng
+      const cached = JSON.parse(localStorage.getItem(CACHE_KEY) || "null");
+      if(cached){
+        state.rawText = cached.rawText;
+        state.items   = cached.items;
+        render();
+      }
+    }
+  }
+
+  function parseItems(text){
+    // Nguồn r.jina.ai trả về dạng markdown/text. Ta tách theo dòng, giữ lại các dòng có thông tin hành chính.
+    const lines = text.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
+
+    // Gom các dòng "đáng chú ý" theo từ khóa
+    const important = lines.filter(line=>{
+      const l = line.toLowerCase();
+      return (
+        /tỉnh|thành phố|huyện|xã|đơn vị hành chính|địa giới/.test(l) ||
+        KEYWORDS.sapnhap.some(k=>l.includes(k)) ||
+        KEYWORDS.tach.some(k=>l.includes(k))
+      );
+    });
+
+    // Chuẩn hóa thành items có title & desc (ở đây, title là phần trước dấu chấm nếu có)
+    const items = important.map(line=>{
+      const title = line.split(/[.:;-]/)[0].trim();
+      return {
+        id: cryptoRandomId(),
+        title: title,
+        desc: line,
+        norm: strip(line),
+        tag: classify(line)
+      };
+    });
+
+    // Loại trùng theo desc
+    const seen = new Set();
+    const dedup = [];
+    for(const it of items){
+      if(seen.has(it.desc)) continue;
+      seen.add(it.desc);
+      dedup.push(it);
+    }
+    return dedup;
+  }
+
+  function classify(line){
+    const l = line.toLowerCase();
+    if (KEYWORDS.sapnhap.some(k=>l.includes(k))) return "sapnhap";
+    if (KEYWORDS.tach.some(k=>l.includes(k)))    return "tach";
+    return "khac";
+  }
+
+  function cryptoRandomId(){
+    try{
+      const arr = new Uint8Array(8);
+      crypto.getRandomValues(arr);
+      return Array.from(arr).map(b=>b.toString(16).padStart(2,"0")).join("");
+    }catch{
+      return Math.random().toString(36).slice(2);
+    }
+  }
+
+  // ====== Search, Filter, Render ======
+  function applyFilter(){
+    const q = strip(state.query);
+    const f = state.filter;
+
+    let arr = state.items;
+
+    if(f !== "all"){
+      arr = arr.filter(x=>x.tag===f);
+    }
+
+    if(q){
+      // Ưu tiên chứa nguyên cụm, sau đó đến các từ rời
+      const tokens = q.split(/\s+/).filter(Boolean);
+      const scored = arr.map(x=>{
+        let score = 0;
+        if(x.norm.includes(q)) score += 5;
+        for(const t of tokens){
+          if(x.norm.includes(t)) score += 1;
+        }
+        return {x,score};
+      }).filter(o=>o.score>0)
+        .sort((a,b)=>b.score-a.score)
+        .map(o=>o.x);
+      state.filtered = scored;
+    } else {
+      state.filtered = arr.slice(0,100); // giới hạn hiển thị mặc định
+    }
+
+    renderList();
+  }
+
+  function render(){
+    applyFilter();
+    updateCount();
+    buildAutocomplete();
+  }
+
+  function renderList(){
+    const box = el("results");
+    if(!state.filtered.length){
+      box.innerHTML = `<div class="empty">Không có kết quả phù hợp. Thử đổi từ khóa hoặc bộ lọc.</div>`;
+      updateCount();
+      return;
+    }
+    box.innerHTML = state.filtered.map(item=>`
+      <div class="item">
+        <h3>${escapeHtml(item.title)} ${badge(item.tag)}</h3>
+        <p>${highlight(item.desc, state.query)}</p>
+        <div class="muted">ID: ${item.id}</div>
+      </div>
+    `).join("");
+    updateCount();
+  }
+
+  function badge(tag){
+    const text = tag==="sapnhap"?"Sáp nhập/Hợp nhất":tag==="tach"?"Tách":"Khác";
+    return `<span class="pill" style="margin-left:6px; cursor:default">${text}</span>`;
+  }
+
+  function updateCount(){
+    el("countPill").textContent = `${state.filtered.length} kết quả`;
+  }
+
+  function highlight(text, q){
+    if(!q) return escapeHtml(text);
+    // khử dấu cả 2 bên để tìm, nhưng giữ nguyên text gốc khi hiển thị
+    const normText = strip(text);
+    const normQ = strip(q);
+    if(!normQ) return escapeHtml(text);
+
+    // Tạo map vị trí highlight dựa trên chuỗi thường
+    const ranges = [];
+    let idx = 0;
+    while((idx = normText.indexOf(normQ, idx)) !== -1){
+      ranges.push([idx, idx+normQ.length]);
+      idx += normQ.length;
+    }
+    // Ngoài nguyên cụm, còn highlight từng token rời
+    for(const t of normQ.split(/\s+/)){
+      if(!t) continue;
+      let i = 0;
+      while((i = normText.indexOf(t, i)) !== -1){
+        ranges.push([i, i+t.length]);
+        i += t.length;
+      }
+    }
+    // Gộp ranges
+    ranges.sort((a,b)=>a[0]-b[0]);
+    const merged = [];
+    for(const r of ranges){
+      if(!merged.length || r[0] > merged[merged.length-1][1]){
+        merged.push(r.slice());
+      }else{
+        merged[merged.length-1][1] = Math.max(merged[merged.length-1][1], r[1]);
+      }
+    }
+    // Ánh xạ lại theo chỉ số trên chuỗi gốc: để đơn giản, thay thế bằng regex không dấu sẽ rối;
+    // ta fallback: bôi đậm tất cả lần xuất hiện q (có dấu) trước, nếu không thấy thì giữ ranges theo vị trí không dấu => làm gần đúng.
+    const safe = escapeHtml(text);
+    const re = new RegExp(escapeRegExp(q), "gi");
+    if(re.test(safe)){
+      return safe.replace(re, m=>`<mark>${m}</mark>`);
+    }
+    // Nếu không khớp trực tiếp (do dấu), chỉ bôi đậm toàn bộ văn bản theo positions ước lượng là quá phức tạp.
+    // Phương án nhẹ: bôi đậm từng từ không dấu bằng regex rộng:
+    let out = safe;
+    for(const t of normQ.split(/\s+/).filter(Boolean)){
+      const re2 = new RegExp("(" + t.split("").map(ch=>`[${escapeForDiacritics(ch)}]`).join("") + ")", "gi");
+      out = out.replace(re2, "<mark>$1</mark>");
+    }
+    return out;
+  }
+
+  function escapeForDiacritics(ch){
+    // rất đơn giản: không thật đầy đủ, nhưng giúp highlight gần đúng
+    const map = {
+      a:"aàáạảãâầấậẩẫăằắặẳẵ",
+      e:"eèéẹẻẽêềếệểễ",
+      i:"iìíịỉĩ",
+      o:"oòóọỏõôồốộổỗơờớợởỡ",
+      u:"uùúụủũưừứựửữ",
+      y:"yỳýỵỷỹ",
+      d:"dđ"
+    };
+    for(const k in map){
+      if(k===ch) return map[k];
+    }
+    return ch;
+  }
+
+  function escapeHtml(s){
+    return s.replace(/[&<>"']/g,m=>({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[m]));
+  }
+  function escapeRegExp(s){return s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}
+
+  // ====== Autocomplete ======
+  function buildAutocomplete(){
+    const ac = el("ac");
+    const uniqueTitles = Array.from(new Set(state.items.map(x=>x.title))).slice(0,500);
+    ac.innerHTML = uniqueTitles.map(t=>`<div class="ac-item" data-val="${escapeHtml(t)}">${escapeHtml(t)}</div>`).join("");
+  }
+
+  function showAutocomplete(show){
+    const ac = el("ac");
+    ac.classList.toggle("show", !!show);
+  }
+
+  // ====== Events ======
+  // Tìm kiếm realtime (debounce)
+  let tmr = null;
+  el("q").addEventListener("input", (e)=>{
+    state.query = e.target.value || "";
+    clearTimeout(tmr);
+    tmr = setTimeout(applyFilter, 120);
+    showAutocomplete(state.query.length===0); // gợi ý khi trống
+  });
+  el("q").addEventListener("focus", ()=>{
+    if(!state.query) showAutocomplete(true);
+  });
+  document.addEventListener("click", (e)=>{
+    const ac = el("ac");
+    if(ac.contains(e.target)){
+      if(e.target.classList.contains("ac-item")){
+        el("q").value = e.target.getAttribute("data-val");
+        state.query = el("q").value;
+        applyFilter();
+        showAutocomplete(false);
+        el("q").focus();
+      }
+      return;
+    }
+    if(!el("q").contains(e.target)) showAutocomplete(false);
+  });
+  el("q").addEventListener("keydown", (e)=>{
+    if(e.key==="Enter"){ e.preventDefault(); applyFilter(); showAutocomplete(false); }
+  });
+
+  // Bộ lọc theo tag
+  document.querySelectorAll(".pill[data-filter]").forEach(p=>{
+    p.addEventListener("click", ()=>{
+      document.querySelectorAll(".pill[data-filter]").forEach(x=>x.classList.remove("active"));
+      p.classList.add("active");
+      state.filter = p.getAttribute("data-filter");
+      applyFilter();
+    });
+  });
+  document.querySelector('.pill[data-filter="all"]').classList.add("active");
+
+  // Nút xóa
+  el("clearBtn").addEventListener("click", ()=>{
+    el("q").value = "";
+    state.query = "";
+    applyFilter();
+    showAutocomplete(true);
+    el("q").focus();
+  });
+
+  // Làm mới dữ liệu
+  el("refreshBtn").addEventListener("click", ()=> loadData({force:true}));
+
+  // Xuất JSON (các item đã phân loại)
+  el("exportBtn").addEventListener("click", ()=>{
+    const blob = new Blob([JSON.stringify(state.items, null, 2)], {type:"application/json;charset=utf-8"});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "data_sap_nhap_tinh.json";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  });
+
+  // Init
+  loadData();
+
+})();
+</script>
+</body>
+</html>
